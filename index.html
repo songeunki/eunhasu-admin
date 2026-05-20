@@ -13,6 +13,7 @@
     body{background:#020817;font-family:"Noto Sans KR",sans-serif;overflow-x:hidden;}
     #root{min-height:100vh;}
     ::-webkit-scrollbar{display:none;}
+    input::placeholder{color:#2a3a5a;}
   </style>
 </head>
 <body>
@@ -944,7 +945,9 @@ function AdminApp({ admin, onLogout }) {
   const [fbReady,  setFbReady]  = useState(false);
   const [detailId, setDetailId] = useState(null);
   const [notif,    setNotif]    = useState(null);
-  const [showLogout, setShowLogout] = useState(false);
+  const [showLogout,    setShowLogout]    = useState(false);
+  const [showAddMatch,  setShowAddMatch]  = useState(false);
+  const [newMatchForm,  setNewMatchForm]  = useState({});
 
   // Firebase 실시간 리스너
   useEffect(()=>{
@@ -1096,14 +1099,84 @@ function AdminApp({ admin, onLogout }) {
         {/* 일정 탭 */}
         {tab==="schedule"&&(
           <div>
-            <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>경기 일정 · 기록 입력</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontSize:19,fontWeight:800}}>경기 일정 · 기록 입력</div>
+              <button onClick={()=>setShowAddMatch(true)}
+                style={{background:"linear-gradient(135deg,#2ecc71,#27ae60)",border:"none",borderRadius:10,padding:"8px 14px",color:"#000",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                ＋ 경기 추가
+              </button>
+            </div>
+
+            {/* 경기 추가 모달 */}
+            {showAddMatch&&(
+              <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowAddMatch(false)}>
+                <div onClick={e=>e.stopPropagation()} style={{background:"#0d1b3e",border:"1px solid #1e3060",borderRadius:16,width:"100%",maxWidth:460,padding:24,boxShadow:"0 24px 80px rgba(0,0,0,.6)"}}>
+                  <div style={{fontSize:17,fontWeight:800,marginBottom:18}}>➕ 경기 추가</div>
+                  {[
+                    {label:"날짜",     key:"date",  ph:"05/30"},
+                    {label:"시간",     key:"time",  ph:"11:00"},
+                    {label:"경기장",   key:"field", ph:"제1구장"},
+                    {label:"조",       key:"group", ph:"A"},
+                    {label:"홈팀 이름",key:"hn",    ph:"슈퍼판다A"},
+                    {label:"홈팀 이모지",key:"he",  ph:"🐼"},
+                    {label:"원정팀 이름",key:"an",  ph:"슈팅FC"},
+                    {label:"원정팀 이모지",key:"ae",ph:"⚽"},
+                  ].map(f=>(
+                    <div key={f.key} style={{marginBottom:10}}>
+                      <div style={{fontSize:13,color:"#7b9bc8",marginBottom:4}}>{f.label}</div>
+                      <input value={newMatchForm[f.key]||""} onChange={e=>setNewMatchForm(p=>({...p,[f.key]:e.target.value}))}
+                        placeholder={f.ph} style={{width:"100%",background:"#0f172a",border:"1px solid #1e3060",borderRadius:8,padding:"9px 12px",color:"#e2e8f0",fontSize:14,boxSizing:"border-box",outline:"none",fontFamily:"inherit"}}/>
+                    </div>
+                  ))}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:6}}>
+                    <button onClick={()=>setShowAddMatch(false)} style={{background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:"12px 0",color:"#94a3b8",fontWeight:700,fontSize:14,cursor:"pointer"}}>취소</button>
+                    <button onClick={()=>{
+                      const f=newMatchForm;
+                      if(!f.hn||!f.an){showNotif("홈팀/원정팀 이름을 입력해주세요","#ff4757");return;}
+                      const newId=Math.max(0,...matches.map(m=>m.id))+1;
+                      const halfDur=f.group==="B"?15:10;
+                      const nm={
+                        id:newId, date:f.date||"05/30", time:f.time||"00:00",
+                        field:f.field||"제1구장", group:(f.group||"A").toUpperCase(),
+                        halfDuration:halfDur,
+                        home:{name:f.hn,emoji:f.he||"⚽",color:"#3498db"},
+                        away:{name:f.an,emoji:f.ae||"⚽",color:"#e74c3c"},
+                        status:"예정",hs:null,as:null,phase:"pre",elapsedSec:0,
+                        extraFirst:0,extraSecond:0,events:[],
+                        lineup:{home:{formation:"4-4-2",gk:["GK"],df:["DF1","DF2","DF3","DF4"],mf:["MF1","MF2","MF3","MF4"],fw:["FW1","FW2"]},
+                                away:{formation:"4-4-2",gk:["GK"],df:["DF1","DF2","DF3","DF4"],mf:["MF1","MF2","MF3","MF4"],fw:["FW1","FW2"]}},
+                        stats:{possession:[50,50],shots:[0,0],shotsOnTarget:[0,0],corners:[0,0],fouls:[0,0],yellowCards:[0,0]},
+                      };
+                      setMatches(prev=>{const next=[...prev,nm];FB.saveMatches(next).catch(()=>{});return next;});
+                      setNewMatchForm({});setShowAddMatch(false);
+                      showNotif(`✅ ${f.hn} vs ${f.an} 경기 추가!`);
+                    }} style={{background:"linear-gradient(135deg,#2ecc71,#27ae60)",border:"none",borderRadius:10,padding:"12px 0",color:"#000",fontWeight:800,fontSize:14,cursor:"pointer"}}>추가</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {["A","B","C"].map(grp=>{
               const gm=matches.filter(m=>m.group===grp);
               const gi=groupInfo[grp];
               return (
                 <div key={grp} style={{marginBottom:20}}>
                   <div style={{fontSize:15,fontWeight:700,color:gi?.color,marginBottom:10,letterSpacing:1}}>{gi?.label}</div>
-                  {gm.map(m=><MatchCard key={m.id} m={m}/>)}
+                  {gm.map(m=>(
+                    <div key={m.id} style={{position:"relative"}}>
+                      <MatchCard m={m}/>
+                      {/* 삭제 버튼 — 예정 경기만 */}
+                      {m.phase==="pre"&&(
+                        <button onClick={()=>{
+                          if(!window.confirm(`${m.home.name} vs ${m.away.name} 경기를 삭제할까요?`)) return;
+                          setMatches(prev=>{const next=prev.filter(x=>x.id!==m.id);FB.saveMatches(next).catch(()=>{});return next;});
+                          showNotif("🗑 경기가 삭제됐습니다","#ff4757");
+                        }} style={{position:"absolute",top:10,right:10,background:"rgba(255,71,87,.15)",border:"1px solid #ff475740",borderRadius:7,padding:"4px 9px",color:"#ff4757",fontSize:13,fontWeight:700,cursor:"pointer",zIndex:2}}>
+                          🗑 삭제
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               );
             })}
